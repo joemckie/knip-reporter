@@ -14,6 +14,29 @@ import { runCommentTask } from "./tasks/comment.ts";
 import { runKnipTasks } from "./tasks/knip.ts";
 import { timeTask } from "./tasks/task.ts";
 
+/**
+ * Runs a task requiring a write-scoped token. A read-only token, such as a
+ * fork's `pull_request` run, rejects writes with a 403. Reporting what we can
+ * beats failing the run, so skip the task with a warning.
+ *
+ * @returns the task's result, or undefined when skipped
+ */
+async function runIfPermitted<T>(
+  task: () => Promise<T>,
+  skipWarning: string,
+): Promise<T | undefined> {
+  try {
+    return await task();
+  } catch (error) {
+    if (!isInsufficientPermissionsError(error)) {
+      throw error;
+    }
+
+    core.warning(skipWarning);
+    return undefined;
+  }
+}
+
 export async function main(): Promise<void> {
   try {
     const config = getConfig();
@@ -30,23 +53,13 @@ export async function main(): Promise<void> {
 
     let checkId: number | undefined;
     if (config.annotations) {
-      try {
-        checkId = await timeTask("Create check ID", () =>
-          createCheckId("knip-reporter-annotations-check", "Knip reporter analysis"),
-        );
-      } catch (error) {
-        if (!isInsufficientPermissionsError(error)) {
-          throw error;
-        }
-
-        // A read-only token (e.g. a pull_request run from a fork) can't create
-        // checks. Skip annotations rather than failing the whole run; to post
-        // checks for fork pull requests, run knip-reporter from a workflow_run
-        // workflow where the token has `checks: write`.
-        core.warning(
-          "Unable to create a check: the GITHUB_TOKEN lacks 'checks: write' permission. Skipping annotations.",
-        );
-      }
+      checkId = await runIfPermitted(
+        () =>
+          timeTask("Create check ID", () =>
+            createCheckId("knip-reporter-annotations-check", "Knip reporter analysis"),
+          ),
+        "Unable to create a check: the GITHUB_TOKEN lacks 'checks: write' permission. Skipping annotations.",
+      );
     }
 
     const { sections: knipSections, annotations: knipAnnotations } = await runKnipTasks({
@@ -63,7 +76,10 @@ export async function main(): Promise<void> {
     // the comment creation task.
     const pullRequestNumber = await getPullRequestNumber();
     if (pullRequestNumber) {
-      await runCommentTask(config.commentId, pullRequestNumber, knipSections);
+      await runIfPermitted(
+        () => runCommentTask(config.commentId, pullRequestNumber, knipSections),
+        "Unable to post the report: the GITHUB_TOKEN lacks 'pull-requests: write' permission. Skipping the comment.",
+      );
     } else {
       core.info("No pull request associated with this event, skipping comment creation");
     }

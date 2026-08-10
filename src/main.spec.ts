@@ -225,6 +225,41 @@ describe("main", () => {
     assertOnlyCalled(coreInfoLogMock, coreErrorLogMock);
   });
 
+  it("should skip the comment when the token lacks permission to post it", async () => {
+    runCommentTaskMock.mockRejectedValue(
+      new Error("Failed to create comment", { cause: { status: 403 } }),
+    );
+
+    // Behaviour
+    await main();
+
+    // The comment is skipped, but the annotations check still resolves.
+    expect(runCommentTaskMock).toHaveBeenCalledOnce();
+    expect(updateCheckAnnotationsMock).toHaveBeenCalledOnce();
+    expect(resolveCheckMock).toHaveBeenCalledOnce();
+    expect(coreSetFailedMock).not.toHaveBeenCalled();
+
+    // Logging
+    assertOnlyCalled(coreInfoLogMock, coreWarningLogMock);
+    expect(coreWarningLogMock.mock.lastCall?.[0]).toContain(
+      "lacks 'pull-requests: write' permission",
+    );
+  });
+
+  it("should fail when the comment task throws a non-permission error", async () => {
+    runCommentTaskMock.mockRejectedValue(new Error("boom"));
+
+    // Behaviour
+    await main();
+
+    // A non-permission failure is unexpected and must fail the run.
+    expect(coreSetFailedMock).toHaveBeenCalledOnce();
+    expect(resolveCheckMock).not.toHaveBeenCalled();
+
+    // Logging
+    assertOnlyCalled(coreInfoLogMock, coreErrorLogMock);
+  });
+
   it("should run the check but skip the comment when no pull request is associated", async () => {
     delete github.context.payload.pull_request;
     github.context.payload.workflow_run = { pull_requests: [], head_sha: "abc123" };
