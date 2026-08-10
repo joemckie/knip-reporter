@@ -74,6 +74,42 @@ const mockOctokit = {
   },
 };
 
+/**
+ * Mocks a rest-method spy to serve `getPages()` one page per call, and
+ * rewires `paginate.iterator` to pull pages until the method returns nothing.
+ * We don't need to test the GitHub API itself, only that our iterator
+ * handling works as expected.
+ */
+function mockPaginatedRestMethod(
+  restSpy: MockInstance<(_req?: any) => Promise<MockResponse>>,
+  getPages: () => unknown[],
+): MockInstance<(_req?: any) => Promise<MockResponse>> {
+  let call = 0;
+  restSpy.mockImplementation(() => {
+    const toReturn = getPages()[call];
+    call++;
+
+    if (!toReturn) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      return undefined as any;
+    }
+
+    return Promise.resolve({ data: toReturn, status: 200 });
+  });
+
+  vi.spyOn(mockOctokit.paginate, "iterator").mockImplementation((rest) => {
+    return (async function* () {
+      let results: any = await rest();
+      while (results) {
+        yield results;
+        results = await rest();
+      }
+    })();
+  });
+
+  return restSpy;
+}
+
 describe("API", () => {
   const cfg: ActionConfig = {
     token: "secret",
@@ -197,34 +233,10 @@ describe("API", () => {
     let listCommentsSpy: MockInstance;
 
     beforeEach(() => {
-      // This mock may look like a case of "set foo assert foo is foo" but we don't need to test the
-      // github API, we're testing that our iterator handling works as expected.
-      let call = 0;
-      listCommentsSpy = vi.spyOn(mockOctokit.rest.issues, "listComments").mockImplementation(() => {
-        const toReturn = listCommentsToReturn[call];
-        call++;
-
-        if (!toReturn) {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-          return undefined as any;
-        }
-
-        return Promise.resolve({
-          data: toReturn,
-          status: 200,
-        });
-      });
-
-      vi.spyOn(mockOctokit.paginate, "iterator").mockImplementation((rest) => {
-        return (async function* () {
-          const boundRest = rest;
-          let results: any = await boundRest();
-          while (results) {
-            yield results;
-            results = await boundRest();
-          }
-        })();
-      });
+      listCommentsSpy = mockPaginatedRestMethod(
+        vi.spyOn(mockOctokit.rest.issues, "listComments"),
+        () => listCommentsToReturn,
+      );
     });
 
     it("should return undefined for no results", async () => {
@@ -593,31 +605,10 @@ describe("API", () => {
     let pagesToReturn: any[];
 
     beforeEach(() => {
-      let call = 0;
-      vi.spyOn(mockOctokit.rest.repos, "listPullRequestsAssociatedWithCommit").mockImplementation(
-        () => {
-          const toReturn = pagesToReturn[call];
-          call++;
-
-          if (!toReturn) {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-            return undefined as any;
-          }
-
-          return Promise.resolve({ data: toReturn, status: 200 });
-        },
+      mockPaginatedRestMethod(
+        vi.spyOn(mockOctokit.rest.repos, "listPullRequestsAssociatedWithCommit"),
+        () => pagesToReturn,
       );
-
-      vi.spyOn(mockOctokit.paginate, "iterator").mockImplementation((rest) => {
-        return (async function* () {
-          const boundRest = rest;
-          let results: any = await boundRest();
-          while (results) {
-            yield results;
-            results = await boundRest();
-          }
-        })();
-      });
     });
 
     it("returns the number of the pull request whose head sha matches", async () => {
