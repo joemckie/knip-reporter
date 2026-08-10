@@ -643,14 +643,14 @@ describe("API", () => {
       assertOnlyCalled(coreDebugLogMock, coreInfoLogMock);
       expect(coreInfoLogMock).toHaveBeenCalledOnce();
       expect(coreInfoLogMock.mock.lastCall?.[0]).toMatchInlineSnapshot(
-        `"Found 2 pull-requests for this commit."`,
+        `"[findPullRequestNumberForCommitSha]: Found 2 pull-requests for this commit."`,
       );
       expect(coreDebugLogMock).toHaveBeenCalledTimes(2);
       expect(coreDebugLogMock.mock.calls[0]?.[0]).toMatchInlineSnapshot(
-        `"Comparing: 1 sha: other-sha with expected: target-sha."`,
+        `"[findPullRequestNumberForCommitSha]: Comparing: 1 sha: other-sha with expected: target-sha."`,
       );
       expect(coreDebugLogMock.mock.lastCall?.[0]).toMatchInlineSnapshot(
-        `"Comparing: 2 sha: target-sha with expected: target-sha."`,
+        `"[findPullRequestNumberForCommitSha]: Comparing: 2 sha: target-sha with expected: target-sha."`,
       );
     });
 
@@ -668,17 +668,17 @@ describe("API", () => {
       assertOnlyCalled(coreDebugLogMock, coreInfoLogMock);
       expect(coreInfoLogMock).toHaveBeenCalledTimes(2);
       expect(coreInfoLogMock.mock.calls[0]?.[0]).toMatchInlineSnapshot(
-        `"Found 1 pull-requests for this commit."`,
+        `"[findPullRequestNumberForCommitSha]: Found 1 pull-requests for this commit."`,
       );
       expect(coreInfoLogMock.mock.lastCall?.[0]).toMatchInlineSnapshot(
-        `"Found 1 pull-requests for this commit."`,
+        `"[findPullRequestNumberForCommitSha]: Found 1 pull-requests for this commit."`,
       );
       expect(coreDebugLogMock).toHaveBeenCalledTimes(2);
       expect(coreDebugLogMock.mock.calls[0]?.[0]).toMatchInlineSnapshot(
-        `"Comparing: 1 sha: page-one-sha with expected: target-sha."`,
+        `"[findPullRequestNumberForCommitSha]: Comparing: 1 sha: page-one-sha with expected: target-sha."`,
       );
       expect(coreDebugLogMock.mock.lastCall?.[0]).toMatchInlineSnapshot(
-        `"Comparing: 99 sha: target-sha with expected: target-sha."`,
+        `"[findPullRequestNumberForCommitSha]: Comparing: 99 sha: target-sha with expected: target-sha."`,
       );
     });
 
@@ -693,15 +693,31 @@ describe("API", () => {
       assertOnlyCalled(coreDebugLogMock, coreInfoLogMock);
       expect(coreInfoLogMock).toHaveBeenCalledTimes(2);
       expect(coreInfoLogMock.mock.calls[0]?.[0]).toMatchInlineSnapshot(
-        `"Found 1 pull-requests for this commit."`,
+        `"[findPullRequestNumberForCommitSha]: Found 1 pull-requests for this commit."`,
       );
       expect(coreInfoLogMock.mock.lastCall?.[0]).toMatchInlineSnapshot(
-        `"Could not find a pull-request for commit "target-sha"."`,
+        `"[findPullRequestNumberForCommitSha]: Could not find a pull-request for commit "target-sha"."`,
       );
       expect(coreDebugLogMock).toHaveBeenCalledOnce();
       expect(coreDebugLogMock.mock.lastCall?.[0]).toMatchInlineSnapshot(
-        `"Comparing: 1 sha: some-other-sha with expected: target-sha."`,
+        `"[findPullRequestNumberForCommitSha]: Comparing: 1 sha: some-other-sha with expected: target-sha."`,
       );
+    });
+
+    it("should wrap octokit failures with the underlying cause", async () => {
+      const cause = new Error("Bad credentials");
+      vi.spyOn(mockOctokit.rest.repos, "listPullRequestsAssociatedWithCommit").mockRejectedValue(
+        cause,
+      );
+
+      // Behaviour
+      await expect(findPullRequestNumberForCommitSha("target-sha")).rejects.toMatchObject({
+        message: "Failed to find pull requests for commit",
+        cause,
+      });
+
+      // Logging
+      assertNoneCalled();
     });
   });
 });

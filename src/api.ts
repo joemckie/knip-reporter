@@ -170,16 +170,18 @@ export async function findPullRequestNumberForCommitSha(sha: string): Promise<nu
         owner: github.context.repo.owner,
         repo: github.context.repo.repo,
         commit_sha: sha,
-        per_page: 30,
+        per_page: 100,
       },
     );
 
     for await (const { data: pullRequests } of pullRequestsIterator) {
-      core.info(`Found ${pullRequests.length} pull-requests for this commit.`);
+      core.info(
+        `[findPullRequestNumberForCommitSha]: Found ${pullRequests.length} pull-requests for this commit.`,
+      );
 
       for (const pullRequest of pullRequests) {
         core.debug(
-          `Comparing: ${pullRequest.number} sha: ${pullRequest.head.sha} with expected: ${sha}.`,
+          `[findPullRequestNumberForCommitSha]: Comparing: ${pullRequest.number} sha: ${pullRequest.head.sha} with expected: ${sha}.`,
         );
 
         if (pullRequest.head.sha === sha) {
@@ -187,13 +189,17 @@ export async function findPullRequestNumberForCommitSha(sha: string): Promise<nu
         }
       }
     }
+  } catch (error) {
+    throw new Error("Failed to find pull requests for commit", { cause: error });
   } finally {
     // Always close the log group, even on an early return or a thrown
     // pagination error, so subsequent logs are not nested under it.
     core.endGroup();
   }
 
-  core.info(`Could not find a pull-request for commit "${sha}".`);
+  core.info(
+    `[findPullRequestNumberForCommitSha]: Could not find a pull-request for commit "${sha}".`,
+  );
 
   return undefined;
 }

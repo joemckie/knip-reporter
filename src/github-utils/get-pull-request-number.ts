@@ -32,9 +32,8 @@ export async function getPullRequestNumber(): Promise<number | undefined> {
     try {
       return await findPullRequestNumberForCommitSha(sha);
     } catch (error) {
-      core.warning(
-        `An error occurred while fetching pull requests from the GitHub API: ${(error as Error).message}`,
-      );
+      const detail = error instanceof Error ? error.message : String(error);
+      core.warning(`An error occurred while fetching pull requests from the GitHub API: ${detail}`);
 
       return undefined;
     }
