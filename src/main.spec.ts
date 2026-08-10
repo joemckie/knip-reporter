@@ -192,7 +192,9 @@ describe("main", () => {
 
   it("should skip annotations when the token lacks permission to create a check", async () => {
     createCheckIdMock.mockRejectedValue(
-      new Error("Failed to create check", { cause: { status: 403 } }),
+      new Error("Failed to create check", {
+        cause: { status: 403, message: "Resource not accessible by integration" },
+      }),
     );
 
     // Behaviour
@@ -227,7 +229,9 @@ describe("main", () => {
 
   it("should skip the comment when the token lacks permission to post it", async () => {
     runCommentTaskMock.mockRejectedValue(
-      new Error("Failed to create comment", { cause: { status: 403 } }),
+      new Error("Failed to create comment", {
+        cause: { status: 403, message: "Resource not accessible by integration" },
+      }),
     );
 
     // Behaviour
