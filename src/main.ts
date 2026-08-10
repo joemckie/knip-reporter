@@ -3,6 +3,7 @@ import * as core from "@actions/core";
 import { configToStr, DEFAULT_KNIP_COMMAND, getConfig } from "./action.ts";
 import { init } from "./api.ts";
 import { getPullRequestNumber } from "./github-utils/get-pull-request-number.ts";
+import { isInsufficientPermissionsError } from "./github-utils/is-insufficient-permissions-error.ts";
 import {
   AnnotationsCount,
   createCheckId,
@@ -29,9 +30,23 @@ export async function main(): Promise<void> {
 
     let checkId: number | undefined;
     if (config.annotations) {
-      checkId = await timeTask("Create check ID", () =>
-        createCheckId("knip-reporter-annotations-check", "Knip reporter analysis"),
-      );
+      try {
+        checkId = await timeTask("Create check ID", () =>
+          createCheckId("knip-reporter-annotations-check", "Knip reporter analysis"),
+        );
+      } catch (error) {
+        if (!isInsufficientPermissionsError(error)) {
+          throw error;
+        }
+
+        // A read-only token (e.g. a pull_request run from a fork) can't create
+        // checks. Skip annotations rather than failing the whole run; to post
+        // checks for fork pull requests, run knip-reporter from a workflow_run
+        // workflow where the token has `checks: write`.
+        core.warning(
+          "Unable to create a check: the GITHUB_TOKEN lacks 'checks: write' permission. Skipping annotations.",
+        );
+      }
     }
 
     const { sections: knipSections, annotations: knipAnnotations } = await runKnipTasks({

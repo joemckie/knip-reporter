@@ -38,7 +38,8 @@ vi.mock("./tasks/knip.ts");
 vi.mock("./tasks/task.ts");
 
 describe("main", () => {
-  const { coreInfoLogMock, coreWarningLogMock, assertOnlyCalled } = mockLoggingFunctions();
+  const { coreInfoLogMock, coreWarningLogMock, coreErrorLogMock, assertOnlyCalled } =
+    mockLoggingFunctions();
 
   const baseConfig: action.ActionConfig = {
     token: "secret",
@@ -187,6 +188,41 @@ describe("main", () => {
 
     // Logging
     assertOnlyCalled(coreInfoLogMock);
+  });
+
+  it("should skip annotations when the token lacks permission to create a check", async () => {
+    createCheckIdMock.mockRejectedValue(
+      new Error("Failed to create check", { cause: { status: 403 } }),
+    );
+
+    // Behaviour
+    await main();
+
+    // The check is skipped, but the run continues and does not fail.
+    expect(createCheckIdMock).toHaveBeenCalledOnce();
+    expect(runKnipTasksMock).toHaveBeenCalledOnce();
+    expect(runCommentTaskMock).toHaveBeenCalledOnce();
+    expect(updateCheckAnnotationsMock).not.toHaveBeenCalled();
+    expect(resolveCheckMock).not.toHaveBeenCalled();
+    expect(coreSetFailedMock).not.toHaveBeenCalled();
+
+    // Logging
+    assertOnlyCalled(coreInfoLogMock, coreWarningLogMock);
+    expect(coreWarningLogMock.mock.lastCall?.[0]).toContain("lacks 'checks: write' permission");
+  });
+
+  it("should fail when check creation throws a non-permission error", async () => {
+    createCheckIdMock.mockRejectedValue(new Error("boom"));
+
+    // Behaviour
+    await main();
+
+    // A non-permission failure is unexpected and must fail the run.
+    expect(coreSetFailedMock).toHaveBeenCalledOnce();
+    expect(runCommentTaskMock).not.toHaveBeenCalled();
+
+    // Logging
+    assertOnlyCalled(coreInfoLogMock, coreErrorLogMock);
   });
 
   it("should run the check but skip the comment when no pull request is associated", async () => {
