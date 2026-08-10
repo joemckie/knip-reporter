@@ -19,7 +19,7 @@ describe("isEventType", () => {
     vi.clearAllMocks();
   });
 
-  it("returns `true` when the event name matches and the payload carries the event object", () => {
+  it("returns `true` when the payload carries the event object", () => {
     github.context.eventName = "pull_request";
     github.context.payload.pull_request = { number: 1 };
 
@@ -27,7 +27,15 @@ describe("isEventType", () => {
     expect(isEventType(github.context, "pull_request")).toStrictEqual(true);
   });
 
-  it("returns `false` when the event type does not match `context.eventName`", () => {
+  it("returns `true` when the payload carries the event object under a different event name", () => {
+    github.context.eventName = "pull_request_target";
+    github.context.payload.pull_request = { number: 1 };
+
+    // Behaviour
+    expect(isEventType(github.context, "pull_request")).toStrictEqual(true);
+  });
+
+  it("returns `false` when the payload does not carry the requested event object", () => {
     github.context.eventName = "workflow_run";
     github.context.payload.workflow_run = { head_sha: "abc123" };
 

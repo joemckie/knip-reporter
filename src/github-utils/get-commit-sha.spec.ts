@@ -15,6 +15,8 @@ describe("getCommitSha", () => {
 
     github.context.eventName = "pull_request";
     github.context.sha = "context-sha";
+    delete github.context.payload.pull_request;
+    delete github.context.payload.workflow_run;
   });
 
   afterEach(() => {
@@ -22,6 +24,18 @@ describe("getCommitSha", () => {
   });
 
   it("returns pull request head sha for pull_request events", () => {
+    github.context.payload.pull_request = {
+      number: 42,
+      head: { sha: "pull-request-sha" },
+    };
+
+    // Behaviour
+    const sha = getCommitSha();
+    expect(sha).toStrictEqual("pull-request-sha");
+  });
+
+  it("returns pull request head sha for pull_request_target events", () => {
+    github.context.eventName = "pull_request_target";
     github.context.payload.pull_request = {
       number: 42,
       head: { sha: "pull-request-sha" },

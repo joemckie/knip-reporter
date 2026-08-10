@@ -21,6 +21,8 @@ describe("getPullRequestNumber", () => {
     vi.clearAllMocks();
 
     github.context.eventName = "pull_request";
+    delete github.context.payload.pull_request;
+    delete github.context.payload.workflow_run;
   });
 
   afterEach(() => {
@@ -33,6 +35,18 @@ describe("getPullRequestNumber", () => {
     // Behaviour
     const pullRequestNumber = await getPullRequestNumber();
     expect(pullRequestNumber).toStrictEqual(42);
+
+    // Logging
+    assertNoneCalled();
+  });
+
+  it("returns the pull request number for pull_request_target events", async () => {
+    github.context.eventName = "pull_request_target";
+    github.context.payload.pull_request = { number: 43 };
+
+    // Behaviour
+    const pullRequestNumber = await getPullRequestNumber();
+    expect(pullRequestNumber).toStrictEqual(43);
 
     // Logging
     assertNoneCalled();
