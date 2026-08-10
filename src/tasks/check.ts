@@ -6,13 +6,8 @@ import type { ItemMeta } from "./types.ts";
 
 export async function createCheckId(name: string, title: string): Promise<number> {
   core.debug(`[createCheckId]: Creating check, name: ${name}, title: ${title}`);
-
-  const {
-    data: { id },
-  } = await createCheck(name, title);
-
+  const id = (await createCheck(name, title)).data.id;
   core.debug(`[createCheckId]: Check created (${id})`);
-
   return id;
 }
 
