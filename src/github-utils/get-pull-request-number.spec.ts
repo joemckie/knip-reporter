@@ -55,7 +55,7 @@ describe("getPullRequestNumber", () => {
   it("returns pull request number from workflow_run payload when available", async () => {
     github.context.eventName = "workflow_run";
     github.context.payload.workflow_run = {
-      pull_requests: [{ number: 100 }],
+      pull_requests: [{ number: 100, head: { sha: "abc123" } }],
       head_sha: "abc123",
     };
 
@@ -71,22 +71,48 @@ describe("getPullRequestNumber", () => {
     );
   });
 
-  it("throws when a pull request is empty in a workflow_run payload", async () => {
+  it("picks the workflow_run payload entry whose head sha matches the run", async () => {
     github.context.eventName = "workflow_run";
     github.context.payload.workflow_run = {
-      pull_requests: [undefined],
+      pull_requests: [
+        { number: 7, head: { sha: "other-sha" } },
+        { number: 8, head: { sha: "abc123" } },
+      ],
       head_sha: "abc123",
     };
 
     // Behaviour
-    await expect(getPullRequestNumber()).rejects.toThrow(
-      "No pull request found in GitHub event payload",
-    );
+    const pullRequestNumber = await getPullRequestNumber();
+    expect(pullRequestNumber).toStrictEqual(8);
 
     // Logging
-    // The malformed entry is validated before anything is logged, so we
-    // never log a misleading "Found undefined" line.
-    assertNoneCalled();
+    assertOnlyCalled(coreInfoLogMock);
+    expect(coreInfoLogMock).toHaveBeenCalledOnce();
+  });
+
+  it("queries the API when no workflow_run payload entry matches the head sha", async () => {
+    github.context.eventName = "workflow_run";
+    github.context.payload.workflow_run = {
+      pull_requests: [{ number: 100, head: { sha: "stale-sha" } }],
+      head_sha: "abc123",
+    };
+
+    const findPullRequestNumberSpy = vi
+      .spyOn(api, "findPullRequestNumberForCommitSha")
+      .mockResolvedValue(555);
+
+    // Behaviour
+    const pullRequestNumber = await getPullRequestNumber();
+    expect(pullRequestNumber).toStrictEqual(555);
+    expect(findPullRequestNumberSpy).toHaveBeenCalledOnce();
+    expect(findPullRequestNumberSpy).toHaveBeenCalledWith("abc123");
+
+    // Logging
+    assertOnlyCalled(coreInfoLogMock);
+    expect(coreInfoLogMock).toHaveBeenCalledOnce();
+    expect(coreInfoLogMock.mock.lastCall?.[0]).toContain(
+      "Trying to find a pull-request with a head commit matching the SHA",
+    );
   });
 
   it("queries the API when workflow_run has no pull request entries", async () => {

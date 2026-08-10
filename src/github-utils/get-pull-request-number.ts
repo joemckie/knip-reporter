@@ -12,14 +12,11 @@ export async function getPullRequestNumber(): Promise<number | undefined> {
   if (isEventType(github.context, "workflow_run")) {
     const { pull_requests: pullRequests, head_sha: sha } = github.context.payload.workflow_run;
 
-    // `workflow_run`s triggered from non-forked PRs will have the PR number in the payload
-    if (pullRequests.length > 0) {
-      const [pullRequest] = pullRequests;
-
-      if (!pullRequest) {
-        throw new Error("No pull request found in GitHub event payload");
-      }
-
+    // `workflow_run`s triggered from non-forked PRs will have the PR number in the payload.
+    // The array can also list stale entries and PRs that merely target the run's
+    // branch, so only trust an entry whose head sha matches the run's head sha.
+    const pullRequest = pullRequests.find((pr) => pr?.head.sha === sha);
+    if (pullRequest) {
       core.info(
         `Found pull-request number in the action's "payload.workflow_run" context: ${pullRequest.number}`,
       );
